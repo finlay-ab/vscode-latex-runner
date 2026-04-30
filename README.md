@@ -2,6 +2,8 @@
 
 **LaTeX Instant Runner** is a zero-config VS Code extension designed specifically for GitHub Codespaces and Linux environments. It turns the complex task of setting up and compiling LaTeX into a simple "one-click" experience.
 
+![LaTeX Instant Runner Demo](demo.gif)
+
 ## ✨ Features
 
 * **One-Click Build:** Adds a clean "Play" button to the top-right of your editor tabs. Just tap it to compile.
