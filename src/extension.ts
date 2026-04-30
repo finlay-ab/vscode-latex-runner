@@ -16,6 +16,20 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    // Check for Tectonic immediately upon extension activation
+    cp.exec('~/.local/bin/tectonic --version || tectonic --version', (err: any) => {
+        if (err) {
+            vscode.window.showErrorMessage(
+                'Tectonic not found. Install instant LaTeX engine?', 
+                'Install Now'
+            ).then(selection => {
+                if (selection === 'Install Now') {
+                    vscode.commands.executeCommand('vscode-latex-runner.runBuild');
+                }
+            });
+        }
+    });
+
     context.subscriptions.push(
         vscode.debug.registerDebugConfigurationProvider('latex-build', provider),
         runCommand
@@ -44,8 +58,8 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
         this.hideSpecificJunkFiles(editor.document.fileName);
         this.checkAndSuggestPdfViewer();
 
-        // Check if Tectonic is installed globally
-        cp.exec('tectonic --version', (err: any) => {
+        // Check if Tectonic is installed globally or locally
+        cp.exec('~/.local/bin/tectonic --version || tectonic --version', (err: any) => {
             const terminalName = 'LaTeX Build';
             const terminal = vscode.window.terminals.find(t => t.name === terminalName) 
                           || vscode.window.createTerminal(terminalName);
@@ -65,10 +79,19 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
                         }, (progress) => {
                             return new Promise((resolve) => {
                                 // Install -> Move -> Absolute Path Run
-                                // We use /usr/local/bin/tectonic directly for the first build
+                                // We use ~/.local/bin/tectonic directly for the first build
                                 // to ensure it works even if $PATH hasn't refreshed yet.
-                                const installCmd = `curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && sudo mv ./tectonic /usr/local/bin/`;
-                                const buildCmd = `cd "$(dirname "${filePath}")" && /usr/local/bin/tectonic "${filePath}" && code "${pdfPath}"`;
+                                
+                                let installCmd = '';
+                                if (process.platform === 'linux') {
+                                    // Bulletproof Linux install (Static musl build, ignores host glibc version)
+                                    installCmd = `mkdir -p ~/.local/bin && curl -sSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.14.1/tectonic-0.14.1-x86_64-unknown-linux-musl.tar.gz" | tar -xz && mv ./tectonic ~/.local/bin/`;
+                                } else {
+                                    // Standard install for macOS and Windows (WSL usually acts as Linux anyway)
+                                    installCmd = `mkdir -p ~/.local/bin && curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && mv ./tectonic ~/.local/bin/`;
+                                }
+
+                                const buildCmd = `cd "$(dirname "${filePath}")" && ~/.local/bin/tectonic "${filePath}" && code "${pdfPath}"`;
                                 
                                 terminal.sendText(`${installCmd} && ${buildCmd}`);
                                 
@@ -79,7 +102,7 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
                 });
             } else {
                 // Tectonic found: Run build immediately
-                terminal.sendText(`cd "$(dirname "${filePath}")" && tectonic "${filePath}" && code "${pdfPath}"`);
+                terminal.sendText(`cd "$(dirname "${filePath}")" && (~/.local/bin/tectonic "${filePath}" || tectonic "${filePath}") && code "${pdfPath}"`);
             }
         });
 
