@@ -48,8 +48,8 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
         // Check for the Mathematic Inc PDF viewer
         this.checkAndSuggestPdfViewer();
 
-        // Check for LaTeX engine and run
-        cp.exec('pdflatex --version', (err: any) => {
+        // Check for Tectonic engine and run
+        cp.exec('tectonic --version', (err: any) => {
             const terminalName = 'LaTeX Build';
             const terminal = vscode.window.terminals.find(t => t.name === terminalName) 
                           || vscode.window.createTerminal(terminalName);
@@ -59,19 +59,19 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
             // The command switches to the file's folder first to avoid permission errors
             if (err) {
                 vscode.window.showErrorMessage(
-                    'LaTeX not found. Install light version (takes ~1-2 mins)?', 
+                    'Tectonic not found. Install instant LaTeX engine?', 
                     'Install Now'
                 ).then(selection => {
                     if (selection === 'Install Now') {
                         // Progress Bar Logic
                         vscode.window.withProgress({
                             location: vscode.ProgressLocation.Notification,
-                            title: "Installing LaTeX (Lite)...",
+                            title: "Installing Tectonic...",
                             cancellable: false
                         }, (progress) => {
                             return new Promise((resolve) => {
-                                // Installs texlive-latex-recommended silently (-y) and then compiles
-                                terminal.sendText(`sudo apt-get update && sudo apt-get install -y texlive-latex-recommended && cd "$(dirname "${filePath}")" && pdflatex -interaction=nonstopmode "${filePath}" && code "${pdfPath}"`);
+                                // Installs tectonic and then compiles with auto-install enabled
+                                terminal.sendText(`sudo apt-get update && sudo apt-get install -y tectonic && cd "$(dirname "${filePath}")" && tectonic --auto-install "${filePath}" && code "${pdfPath}"`);
                                 
                                 // Resolves the progress bar after giving the terminal time to start
                                 setTimeout(() => { resolve(true); }, 5000); 
@@ -80,7 +80,8 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
                     }
                 });
             } else {
-                terminal.sendText(`cd "$(dirname "${filePath}")" && pdflatex -interaction=nonstopmode "${filePath}" && code "${pdfPath}"`);
+                // Using --auto-install to handle missing packages silently
+                terminal.sendText(`cd "$(dirname "${filePath}")" && tectonic --auto-install "${filePath}" && code "${pdfPath}"`);
             }
         });
 
@@ -96,7 +97,7 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
         const fileName = pathParts[pathParts.length - 1];
         const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
 
-        // Hide files matching the name of the .tex file to keep simulation logs visible
+        // Tectonic is much cleaner, but we'll keep the logic to hide any potential local logs
         const updatedExclude = {
             ...exclude,
             [`**/${baseName}.aux`]: true,
