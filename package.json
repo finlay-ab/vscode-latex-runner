@@ -4,6 +4,7 @@
   "description": "Instantly compile LaTeX to PDF without debugging.",
   "version": "0.0.1",
   "publisher": "finlay-ab",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.80.0"
   },
