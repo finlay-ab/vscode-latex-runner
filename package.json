@@ -2,7 +2,7 @@
   "name": "vscode-latex-runner",
   "displayName": "LaTeX Instant Runner",
   "description": "Instantly compile LaTeX to PDF with zero configuration using Tectonic.",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publisher": "finlay-ab",
   "icon": "icon.png",
   "repository": {
