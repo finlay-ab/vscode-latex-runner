@@ -64,14 +64,14 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
                             cancellable: false
                         }, (progress) => {
                             return new Promise((resolve) => {
-                                // This sequence matches exactly what worked manually:
-                                // Download -> Move to /usr/local/bin/ -> Compile
+                                // Install -> Move -> Absolute Path Run
+                                // We use /usr/local/bin/tectonic directly for the first build
+                                // to ensure it works even if $PATH hasn't refreshed yet.
                                 const installCmd = `curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && sudo mv ./tectonic /usr/local/bin/`;
-                                const buildCmd = `cd "$(dirname "${filePath}")" && tectonic "${filePath}" && code "${pdfPath}"`;
+                                const buildCmd = `cd "$(dirname "${filePath}")" && /usr/local/bin/tectonic "${filePath}" && code "${pdfPath}"`;
                                 
                                 terminal.sendText(`${installCmd} && ${buildCmd}`);
                                 
-                                // Give it time to initialize before closing progress bar
                                 setTimeout(() => { resolve(true); }, 5000); 
                             });
                         });
