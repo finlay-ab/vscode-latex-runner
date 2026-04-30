@@ -1,21 +1,57 @@
 {
   "name": "vscode-latex-runner",
-  "displayName": "vscode-latex-runner",
-  "description": "Instantly compile LaTeX to PDF",
+  "displayName": "LaTeX Instant Runner",
+  "description": "Instantly compile LaTeX to PDF without debugging.",
   "version": "0.0.1",
+  "publisher": "finlay-ab",
   "engines": {
-    "vscode": "^1.118.0"
+    "vscode": "^1.80.0"
   },
   "categories": [
+    "Debuggers",
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onDebugResolve:latex-build",
+    "onCommand:vscode-latex-runner.runBuild"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "vscode-latex-runner.helloWorld",
-        "title": "Hello World"
+        "command": "vscode-latex-runner.runBuild",
+        "title": "Build LaTeX PDF",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == latex || resourceLangId == tex",
+          "command": "vscode-latex-runner.runBuild",
+          "group": "navigation"
+        }
+      ]
+    },
+    "debuggers": [
+      {
+        "type": "latex-build",
+        "label": "LaTeX Instant Runner",
+        "languages": [
+          "latex",
+          "tex"
+        ],
+        "configurationSnippets": [
+          {
+            "label": "LaTeX: Build Current File",
+            "description": "Compiles the active LaTeX file using pdflatex",
+            "body": {
+              "type": "latex-build",
+              "request": "launch",
+              "name": "Build LaTeX"
+            }
+          }
+        ]
       }
     ]
   },
@@ -27,20 +63,21 @@
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.118.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
-    "eslint": "^9.39.3",
-    "typescript": "^5.9.3",
-    "ts-loader": "^9.5.4",
-    "webpack": "^5.105.3",
-    "webpack-cli": "^6.0.1",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^16.18.126",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.8",
+    "@typescript-eslint/parser": "^5.59.8",
+    "eslint": "^8.41.0",
+    "glob": "^8.1.0",
+    "mocha": "^10.2.0",
+    "ts-loader": "^9.4.3",
+    "typescript": "^5.1.3",
+    "webpack": "^5.85.0",
+    "webpack-cli": "^5.1.1"
   }
 }

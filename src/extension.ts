@@ -1,26 +1,131 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as cp from 'child_process';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+    const provider = new LatexDebugProvider(context);
+    
+    // Register the command triggered by the top-right editor Play button
+    let runCommand = vscode.commands.registerCommand('vscode-latex-runner.runBuild', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            vscode.debug.startDebugging(undefined, {
+                type: 'latex-build',
+                name: 'Build LaTeX',
+                request: 'launch'
+            });
+        }
+    });
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "vscode-latex-runner" is now active!');
-
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('vscode-latex-runner.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from vscode-latex-runner!');
-	});
-
-	context.subscriptions.push(disposable);
+    context.subscriptions.push(
+        vscode.debug.registerDebugConfigurationProvider('latex-build', provider),
+        runCommand
+    );
 }
 
-// This method is called when your extension is deactivated
+class LatexDebugProvider implements vscode.DebugConfigurationProvider {
+    constructor(private context: vscode.ExtensionContext) {}
+
+    resolveDebugConfiguration(
+        folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration,
+        token?: vscode.CancellationToken
+    ): vscode.ProviderResult<vscode.DebugConfiguration> {
+
+        const editor = vscode.window.activeTextEditor;
+        
+        // Ensure we are looking at a LaTeX file
+        if (!editor || (!editor.document.fileName.endsWith('.tex') && !editor.document.fileName.endsWith('.latex'))) {
+            vscode.window.showErrorMessage('Please open a .tex file to build.');
+            return undefined; 
+        }
+
+        const filePath = editor.document.fileName;
+        const pdfPath = filePath.substring(0, filePath.lastIndexOf('.')) + '.pdf';
+        
+        // Hide ONLY the junk files specifically for THIS LaTeX project name
+        this.hideSpecificJunkFiles(editor.document.fileName);
+
+        // Check for the Mathematic Inc PDF viewer
+        this.checkAndSuggestPdfViewer();
+
+        // Check for LaTeX engine and run
+        cp.exec('pdflatex --version', (err: any) => {
+            const terminalName = 'LaTeX Build';
+            const terminal = vscode.window.terminals.find(t => t.name === terminalName) 
+                          || vscode.window.createTerminal(terminalName);
+            
+            terminal.show();
+
+            // The command switches to the file's folder first to avoid permission errors
+            if (err) {
+                vscode.window.showErrorMessage(
+                    'LaTeX not found. Install light version (takes ~1-2 mins)?', 
+                    'Install Now'
+                ).then(selection => {
+                    if (selection === 'Install Now') {
+                        // Progress Bar Logic
+                        vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: "Installing LaTeX (Lite)...",
+                            cancellable: false
+                        }, (progress) => {
+                            return new Promise((resolve) => {
+                                // Installs texlive-latex-recommended silently (-y) and then compiles
+                                terminal.sendText(`sudo apt-get update && sudo apt-get install -y texlive-latex-recommended && cd "$(dirname "${filePath}")" && pdflatex -interaction=nonstopmode "${filePath}" && code "${pdfPath}"`);
+                                
+                                // Resolves the progress bar after giving the terminal time to start
+                                setTimeout(() => { resolve(true); }, 5000); 
+                            });
+                        });
+                    }
+                });
+            } else {
+                terminal.sendText(`cd "$(dirname "${filePath}")" && pdflatex -interaction=nonstopmode "${filePath}" && code "${pdfPath}"`);
+            }
+        });
+
+        // Abort actual debugging UI so it doesn't hang on a "loading" bar
+        return undefined; 
+    }
+
+    private hideSpecificJunkFiles(texFilePath: string) {
+        const config = vscode.workspace.getConfiguration('files');
+        const exclude = config.get<Record<string, boolean>>('exclude', {});
+        
+        const pathParts = texFilePath.split('/');
+        const fileName = pathParts[pathParts.length - 1];
+        const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
+
+        // Hide files matching the name of the .tex file to keep simulation logs visible
+        const updatedExclude = {
+            ...exclude,
+            [`**/${baseName}.aux`]: true,
+            [`**/${baseName}.log`]: true,
+            [`**/${baseName}.gz`]: true,
+            [`**/${baseName}.out`]: true
+        };
+
+        config.update('exclude', updatedExclude, vscode.ConfigurationTarget.Workspace);
+    }
+
+    private checkAndSuggestPdfViewer() {
+        const shouldIgnore = this.context.globalState.get<boolean>('ignorePdfPrompt', false);
+        const isInstalled = vscode.extensions.getExtension('mathematic.vscode-pdf');
+
+        if (shouldIgnore || isInstalled) { return; }
+
+        vscode.window.showInformationMessage(
+            'Install "PDF Viewer" by Mathematic Inc to view your results directly in VS Code?',
+            'Install Now',
+            'Don\'t Remind Me'
+        ).then(selection => {
+            if (selection === 'Install Now') {
+                vscode.commands.executeCommand('extension.open', 'mathematic.vscode-pdf');
+            } else if (selection === 'Don\'t Remind Me') {
+                this.context.globalState.update('ignorePdfPrompt', true);
+            }
+        });
+    }
+}
+
 export function deactivate() {}

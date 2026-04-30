@@ -1,71 +1,41 @@
-# vscode-latex-runner README
+# LaTeX Instant Runner 🚀
 
-This is the README for your extension "vscode-latex-runner". After writing up a brief description, we recommend including the following sections.
+**LaTeX Instant Runner** is a zero-config VS Code extension designed specifically for GitHub Codespaces and Linux environments. It turns the complex task of setting up and compiling LaTeX into a simple "one-click" experience.
 
-## Features
+## ✨ Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+* **One-Click Build:** Adds a clean "Play" button to the top-right of your editor tabs. Just tap it to compile.
+* **Auto-Provisioning:** Detects if `pdflatex` is missing and offers to install it for you automatically using a lightweight distribution (`texlive-latex-recommended`).
+* **Smart PDF Viewing:** Detects if you have a PDF viewer installed and suggests the best one (Mathematic Inc) if you don't.
+* **Automatic Workspace Cleanup:** Silently hides messy `.aux`, `.log`, and `.out` files from your sidebar, but only for the project you are working on—keeping your simulation logs safe.
+* **Permission-Proof:** Automatically handles directory switching so you never hit a "Permission Denied" error in system folders.
 
-For example if there is an image subfolder under your extension project workspace:
+## 🚀 How to Use
 
-\!\[feature X\]\(images/feature-x.png\)
+1.  Open any `.tex` or `.latex` file.
+2.  Click the **Play Icon** in the top-right corner of the editor title bar.
+3.  Follow the prompts to install the LaTeX engine or PDF viewer if it's your first time.
+4.  Your PDF will compile and open automatically!
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## 📦 Requirements
 
-## Requirements
+* **OS:** Linux-based environments (Optimized for **GitHub Codespaces**).
+* **Permissions:** Sudo access (included by default in Codespaces) for the automatic LaTeX installation feature.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## 🛠 Extension Settings
 
-## Extension Settings
+This extension is designed to be "Zero-Config," but it does modify the following workspace setting:
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+* `files.exclude`: Automatically updated to hide LaTeX junk files matching your current document name.
 
-For example:
+## 📝 Release Notes
 
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+### 0.0.1
+* Initial Release.
+* Added Editor Title Play button.
+* Added automatic LaTeX engine detection and installation with UI Progress Bar.
+* Added Mathematic Inc PDF viewer suggestion logic.
+* Added targeted file-hiding for cleaner workspaces.
 
 ---
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Created by Finlay** — Making LaTeX as easy as Markdown.
