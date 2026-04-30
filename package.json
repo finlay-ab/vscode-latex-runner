@@ -1,7 +1,7 @@
 {
   "name": "vscode-latex-runner",
   "displayName": "LaTeX Instant Runner",
-  "description": "Instantly compile LaTeX to PDF without debugging.",
+  "description": "Instantly compile LaTeX to PDF with zero configuration using Tectonic.",
   "version": "0.0.3",
   "publisher": "finlay-ab",
   "icon": "icon.png",
@@ -13,8 +13,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onDebugResolve:latex-build",
-    "onCommand:vscode-latex-runner.runBuild"
+    "onDebugResolve:latex-build"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -45,7 +44,7 @@
         "configurationSnippets": [
           {
             "label": "LaTeX: Build Current File",
-            "description": "Compiles the active LaTeX file using pdflatex",
+            "description": "Compiles the active LaTeX file using Tectonic",
             "body": {
               "type": "latex-build",
               "request": "launch",

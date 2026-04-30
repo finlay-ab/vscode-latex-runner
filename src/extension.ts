@@ -4,7 +4,7 @@ import * as cp from 'child_process';
 export function activate(context: vscode.ExtensionContext) {
     const provider = new LatexDebugProvider(context);
     
-    // Register the command triggered by the top-right editor Play button
+    // Play button command
     let runCommand = vscode.commands.registerCommand('vscode-latex-runner.runBuild', () => {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
@@ -33,7 +33,6 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
 
         const editor = vscode.window.activeTextEditor;
         
-        // Ensure we are looking at a LaTeX file
         if (!editor || (!editor.document.fileName.endsWith('.tex') && !editor.document.fileName.endsWith('.latex'))) {
             vscode.window.showErrorMessage('Please open a .tex file to build.');
             return undefined; 
@@ -42,13 +41,10 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
         const filePath = editor.document.fileName;
         const pdfPath = filePath.substring(0, filePath.lastIndexOf('.')) + '.pdf';
         
-        // Hide ONLY the junk files specifically for THIS LaTeX project name
         this.hideSpecificJunkFiles(editor.document.fileName);
-
-        // Check for the Mathematic Inc PDF viewer
         this.checkAndSuggestPdfViewer();
 
-        // Check for Tectonic engine and run
+        // Check if Tectonic is installed globally
         cp.exec('tectonic --version', (err: any) => {
             const terminalName = 'LaTeX Build';
             const terminal = vscode.window.terminals.find(t => t.name === terminalName) 
@@ -56,48 +52,46 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
             
             terminal.show();
 
-            // The command switches to the file's folder first to avoid permission errors
             if (err) {
                 vscode.window.showErrorMessage(
                     'Tectonic not found. Install instant LaTeX engine?', 
                     'Install Now'
                 ).then(selection => {
                     if (selection === 'Install Now') {
-                        // Progress Bar Logic
                         vscode.window.withProgress({
                             location: vscode.ProgressLocation.Notification,
                             title: "Installing Tectonic...",
                             cancellable: false
                         }, (progress) => {
                             return new Promise((resolve) => {
-                                // Installs tectonic and then compiles with auto-install enabled
-                                terminal.sendText(`sudo apt-get update && sudo apt-get install -y tectonic && cd "$(dirname "${filePath}")" && tectonic --auto-install "${filePath}" && code "${pdfPath}"`);
+                                // This sequence matches exactly what worked manually:
+                                // Download -> Move to /usr/local/bin/ -> Compile
+                                const installCmd = `curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && sudo mv ./tectonic /usr/local/bin/`;
+                                const buildCmd = `cd "$(dirname "${filePath}")" && tectonic "${filePath}" && code "${pdfPath}"`;
                                 
-                                // Resolves the progress bar after giving the terminal time to start
+                                terminal.sendText(`${installCmd} && ${buildCmd}`);
+                                
+                                // Give it time to initialize before closing progress bar
                                 setTimeout(() => { resolve(true); }, 5000); 
                             });
                         });
                     }
                 });
             } else {
-                // Using --auto-install to handle missing packages silently
-                terminal.sendText(`cd "$(dirname "${filePath}")" && tectonic --auto-install "${filePath}" && code "${pdfPath}"`);
+                // Tectonic found: Run build immediately
+                terminal.sendText(`cd "$(dirname "${filePath}")" && tectonic "${filePath}" && code "${pdfPath}"`);
             }
         });
 
-        // Abort actual debugging UI so it doesn't hang on a "loading" bar
         return undefined; 
     }
 
     private hideSpecificJunkFiles(texFilePath: string) {
         const config = vscode.workspace.getConfiguration('files');
         const exclude = config.get<Record<string, boolean>>('exclude', {});
-        
-        const pathParts = texFilePath.split('/');
-        const fileName = pathParts[pathParts.length - 1];
+        const fileName = texFilePath.split('/').pop() || "";
         const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
 
-        // Tectonic is much cleaner, but we'll keep the logic to hide any potential local logs
         const updatedExclude = {
             ...exclude,
             [`**/${baseName}.aux`]: true,
@@ -112,7 +106,6 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
     private checkAndSuggestPdfViewer() {
         const shouldIgnore = this.context.globalState.get<boolean>('ignorePdfPrompt', false);
         const isInstalled = vscode.extensions.getExtension('mathematic.vscode-pdf');
-
         if (shouldIgnore || isInstalled) { return; }
 
         vscode.window.showInformationMessage(
