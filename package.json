@@ -5,6 +5,13 @@
   "version": "0.0.8",
   "publisher": "finlay-ab",
   "icon": "icon.png",
+  "keywords": [
+    "latex",
+    "tex",
+    "pdf",
+    "compiler",
+    "runner"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/finlay-ab/vscode-latex-runner.git"
