@@ -65,18 +65,16 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
         // hideSpecificJunkFiles (inlined)
         {
             const config = vscode.workspace.getConfiguration('files');
-            const exclude = config.get<Record<string, boolean>>('exclude', {});
             const fileName = filePath.split('/').pop() || "";
             const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
 
             const updatedExclude = {
-                ...exclude,
+                ...config.get<Record<string, boolean>>('exclude', {}),
                 [`**/${baseName}.aux`]: true,
                 [`**/${baseName}.log`]: true,
                 [`**/${baseName}.gz`]: true,
                 [`**/${baseName}.out`]: true
             };
-
             config.update('exclude', updatedExclude, vscode.ConfigurationTarget.Workspace);
         }
 
@@ -98,9 +96,12 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
                                 location: vscode.ProgressLocation.Notification,
                                 title: 'Installing Tectonic...',
                                 cancellable: false
-                            }, () => {
+                            }, (progress) => {
+                                progress.report({ message: 'Preparing install command...' });
+
                                 return new Promise(
                                     (resolve) => {
+                                        progress.report({ message: 'Sending install command to terminal...' });
                                         terminal.sendText((process.platform === 'win32'
                                             ? [
                                                 "$tectonicBin = Join-Path $HOME '.local\\bin'",
@@ -113,7 +114,12 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
                                             ].join('; ')
                                             : 'mkdir -p "$HOME/.local/bin" && curl -sSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40' + TECTONIC_VERSION + '/' + (process.platform === 'darwin' ? ('tectonic-' + TECTONIC_VERSION + '-x86_64-apple-darwin.tar.gz') : ('tectonic-' + TECTONIC_VERSION + '-x86_64-unknown-linux-musl.tar.gz')) + '" | tar -xz && mv ./tectonic "$HOME/.local/bin/"')
                                             + ' && ' + getTectonicBuildCommand(filePath, pdfPath));
-                                        setTimeout(() => { resolve(true); }, 5000);
+                                        progress.report({ message: 'Tectonic install started.' });
+
+                                        setTimeout(() => {
+                                            progress.report({ message: 'Install command dispatched.' });
+                                            resolve(true);
+                                        }, 5000);
                                     }
                                 );
                             }
@@ -128,8 +134,6 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
 
         return undefined;
     }
-
-    
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -167,6 +171,5 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 }
-
 
 export function deactivate() { }
