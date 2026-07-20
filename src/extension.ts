@@ -1,43 +1,50 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as os from 'os';
+import * as path from 'path';
+const TECTONIC_VERSION = '0.14.1';
 
-export function activate(context: vscode.ExtensionContext) {
-    const provider = new LatexDebugProvider(context);
-    
-    // Play button command
-    let runCommand = vscode.commands.registerCommand('vscode-latex-runner.runBuild', () => {
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-            vscode.debug.startDebugging(undefined, {
-                type: 'latex-build',
-                name: 'Build LaTeX',
-                request: 'launch'
-            });
+function escapeShellDoubleQuotes(value: string): string {
+    return value.replace(/"/g, '\\"');
+}
+
+function getLocalTectonicBinary(): string {
+    return process.platform === 'win32'
+        ? path.join(os.homedir(), '.local', 'bin', 'tectonic.exe')
+        : path.join(os.homedir(), '.local', 'bin', 'tectonic');
+}
+
+function canRunBinary(binaryPath: string): boolean {
+    return cp.spawnSync(
+        binaryPath,
+        ['--version'],
+        {
+            stdio: 'ignore',
+            windowsHide: true,
         }
-    });
+    ).status === 0;
+}
 
-    // Check for Tectonic immediately upon extension activation
-    cp.exec('~/.local/bin/tectonic --version || tectonic --version', (err: any) => {
-        if (err) {
-            vscode.window.showErrorMessage(
-                'Tectonic not found. Install instant LaTeX engine?', 
-                'Install Now'
-            ).then(selection => {
-                if (selection === 'Install Now') {
-                    vscode.commands.executeCommand('vscode-latex-runner.runBuild');
-                }
-            });
-        }
-    });
+function hasTectonic(): boolean {
+    return canRunBinary(getLocalTectonicBinary()) || canRunBinary(process.platform === 'win32' ? 'tectonic.exe' : 'tectonic');
+}
 
-    context.subscriptions.push(
-        vscode.debug.registerDebugConfigurationProvider('latex-build', provider),
-        runCommand
-    );
+function getTectonicBuildCommand(filePath: string, pdfPath: string): string {
+    const safeFilePath = escapeShellDoubleQuotes(filePath);
+    const safePdfPath = escapeShellDoubleQuotes(pdfPath);
+
+    if (process.platform === 'win32') {
+        const sourceDirectory = escapeShellDoubleQuotes(path.dirname(filePath));
+        const localBinary = escapeShellDoubleQuotes(getLocalTectonicBinary());
+
+        return `Set-Location -LiteralPath "${sourceDirectory}"; & "${localBinary}" "${safeFilePath}"; if ($LASTEXITCODE -eq 0) { code "${safePdfPath}" }`;
+    }
+
+    return `cd "$(dirname \"${safeFilePath}\")" && "$HOME/.local/bin/tectonic" "${safeFilePath}" && code "${safePdfPath}"`;
 }
 
 class LatexDebugProvider implements vscode.DebugConfigurationProvider {
-    constructor(private context: vscode.ExtensionContext) {}
+    constructor(private context: vscode.ExtensionContext) { }
 
     resolveDebugConfiguration(
         folder: vscode.WorkspaceFolder | undefined,
@@ -46,103 +53,123 @@ class LatexDebugProvider implements vscode.DebugConfigurationProvider {
     ): vscode.ProviderResult<vscode.DebugConfiguration> {
 
         const editor = vscode.window.activeTextEditor;
-        
+
         if (!editor || (!editor.document.fileName.endsWith('.tex') && !editor.document.fileName.endsWith('.latex'))) {
             vscode.window.showErrorMessage('Please open a .tex file to build.');
-            return undefined; 
+            return undefined;
         }
 
         const filePath = editor.document.fileName;
         const pdfPath = filePath.substring(0, filePath.lastIndexOf('.')) + '.pdf';
-        
-        this.hideSpecificJunkFiles(editor.document.fileName);
-        this.checkAndSuggestPdfViewer();
 
-        // Check if Tectonic is installed globally or locally
-        cp.exec('~/.local/bin/tectonic --version || tectonic --version', (err: any) => {
-            const terminalName = 'LaTeX Build';
-            const terminal = vscode.window.terminals.find(t => t.name === terminalName) 
-                          || vscode.window.createTerminal(terminalName);
-            
-            terminal.show();
+        // hideSpecificJunkFiles (inlined)
+        {
+            const config = vscode.workspace.getConfiguration('files');
+            const fileName = filePath.split('/').pop() || "";
+            const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
 
-            if (err) {
-                vscode.window.showErrorMessage(
-                    'Tectonic not found. Install instant LaTeX engine?', 
-                    'Install Now'
-                ).then(selection => {
+            const updatedExclude = {
+                ...config.get<Record<string, boolean>>('exclude', {}),
+                [`**/${baseName}.aux`]: true,
+                [`**/${baseName}.log`]: true,
+                [`**/${baseName}.gz`]: true,
+                [`**/${baseName}.out`]: true
+            };
+            config.update('exclude', updatedExclude, vscode.ConfigurationTarget.Workspace);
+        }
+
+        const terminalName = 'LaTeX Build';
+        const terminal = vscode.window.terminals.find(t => t.name === terminalName)
+            || vscode.window.createTerminal(terminalName);
+
+        terminal.show();
+
+        if (!hasTectonic()) {
+            vscode.window.showErrorMessage(
+                'Tectonic not found. Install instant LaTeX engine?',
+                'Install Now'
+            ).then(
+                selection => {
                     if (selection === 'Install Now') {
-                        vscode.window.withProgress({
-                            location: vscode.ProgressLocation.Notification,
-                            title: "Installing Tectonic...",
-                            cancellable: false
-                        }, (progress) => {
-                            return new Promise((resolve) => {
-                                // Install -> Move -> Absolute Path Run
-                                // We use ~/.local/bin/tectonic directly for the first build
-                                // to ensure it works even if $PATH hasn't refreshed yet.
-                                
-                                let installCmd = '';
-                                if (process.platform === 'linux') {
-                                    // Bulletproof Linux install (Static musl build, ignores host glibc version)
-                                    installCmd = `mkdir -p ~/.local/bin && curl -sSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.14.1/tectonic-0.14.1-x86_64-unknown-linux-musl.tar.gz" | tar -xz && mv ./tectonic ~/.local/bin/`;
-                                } else {
-                                    // Standard install for macOS and Windows (WSL usually acts as Linux anyway)
-                                    installCmd = `mkdir -p ~/.local/bin && curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && mv ./tectonic ~/.local/bin/`;
-                                }
+                        vscode.window.withProgress(
+                            {
+                                location: vscode.ProgressLocation.Notification,
+                                title: 'Installing Tectonic...',
+                                cancellable: false
+                            }, (progress) => {
+                                progress.report({ message: 'Preparing install command...' });
 
-                                const buildCmd = `cd "$(dirname "${filePath}")" && ~/.local/bin/tectonic "${filePath}" && code "${pdfPath}"`;
-                                
-                                terminal.sendText(`${installCmd} && ${buildCmd}`);
-                                
-                                setTimeout(() => { resolve(true); }, 5000); 
-                            });
-                        });
+                                return new Promise(
+                                    (resolve) => {
+                                        progress.report({ message: 'Sending install command to terminal...' });
+                                        terminal.sendText((process.platform === 'win32'
+                                            ? [
+                                                "$tectonicBin = Join-Path $HOME '.local\\bin'",
+                                                'New-Item -ItemType Directory -Force $tectonicBin | Out-Null',
+                                                "$archive = Join-Path $env:TEMP 'tectonic.zip'",
+                                                "$extractDir = Join-Path $env:TEMP 'tectonic-install'",
+                                                `Invoke-WebRequest -Uri 'https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-pc-windows-msvc.zip' -OutFile $archive`,
+                                                'Expand-Archive -Path $archive -DestinationPath $extractDir -Force',
+                                                "Move-Item -Force (Join-Path $extractDir 'tectonic.exe') (Join-Path $tectonicBin 'tectonic.exe')",
+                                            ].join('; ')
+                                            : 'mkdir -p "$HOME/.local/bin" && curl -sSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40' + TECTONIC_VERSION + '/' + (process.platform === 'darwin' ? ('tectonic-' + TECTONIC_VERSION + '-x86_64-apple-darwin.tar.gz') : ('tectonic-' + TECTONIC_VERSION + '-x86_64-unknown-linux-musl.tar.gz')) + '" | tar -xz && mv ./tectonic "$HOME/.local/bin/"')
+                                            + ' && ' + getTectonicBuildCommand(filePath, pdfPath));
+                                        progress.report({ message: 'Tectonic install started.' });
+
+                                        setTimeout(() => {
+                                            progress.report({ message: 'Install command dispatched.' });
+                                            resolve(true);
+                                        }, 5000);
+                                    }
+                                );
+                            }
+                        );
                     }
-                });
-            } else {
-                // Tectonic found: Run build immediately
-                terminal.sendText(`cd "$(dirname "${filePath}")" && (~/.local/bin/tectonic "${filePath}" || tectonic "${filePath}") && code "${pdfPath}"`);
-            }
-        });
+                }
+            );
+        } else {
+            // Tectonic found: Run build immediately
+            terminal.sendText(getTectonicBuildCommand(filePath, pdfPath));
+        }
 
-        return undefined; 
-    }
-
-    private hideSpecificJunkFiles(texFilePath: string) {
-        const config = vscode.workspace.getConfiguration('files');
-        const exclude = config.get<Record<string, boolean>>('exclude', {});
-        const fileName = texFilePath.split('/').pop() || "";
-        const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
-
-        const updatedExclude = {
-            ...exclude,
-            [`**/${baseName}.aux`]: true,
-            [`**/${baseName}.log`]: true,
-            [`**/${baseName}.gz`]: true,
-            [`**/${baseName}.out`]: true
-        };
-
-        config.update('exclude', updatedExclude, vscode.ConfigurationTarget.Workspace);
-    }
-
-    private checkAndSuggestPdfViewer() {
-        const shouldIgnore = this.context.globalState.get<boolean>('ignorePdfPrompt', false);
-        const isInstalled = vscode.extensions.getExtension('mathematic.vscode-pdf');
-        if (shouldIgnore || isInstalled) { return; }
-
-        vscode.window.showInformationMessage(
-            'Install "PDF Viewer" by Mathematic Inc to view your results directly in VS Code?',
-            'Install Now',
-            'Don\'t Remind Me'
-        ).then(selection => {
-            if (selection === 'Install Now') {
-                vscode.commands.executeCommand('extension.open', 'mathematic.vscode-pdf');
-            } else if (selection === 'Don\'t Remind Me') {
-                this.context.globalState.update('ignorePdfPrompt', true);
-            }
-        });
+        return undefined;
     }
 }
 
-export function deactivate() {}
+export function activate(context: vscode.ExtensionContext) {
+    // Play button command
+
+    // Check for Tectonic immediately upon extension activation
+    if (!hasTectonic()) {
+        vscode.window.showErrorMessage(
+            'Tectonic not found. Install instant LaTeX engine?',
+            'Install Now'
+        ).then(
+            selection => {
+                if (selection === 'Install Now') {
+                    vscode.commands.executeCommand('vscode-latex-runner.runBuild');
+                }
+            }
+        );
+    }
+
+    context.subscriptions.push(
+        vscode.debug.registerDebugConfigurationProvider('latex-build', new LatexDebugProvider(context)),
+        vscode.commands.registerCommand(
+            'vscode-latex-runner.runBuild', () => {
+                if (vscode.window.activeTextEditor) {
+                    vscode.debug.startDebugging(
+                        undefined,
+                        {
+                            type: 'latex-build',
+                            name: 'Build LaTeX',
+                            request: 'launch'
+                        }
+                    );
+                }
+            }
+        )
+    );
+}
+
+export function deactivate() { }
